@@ -4,13 +4,13 @@
 package com.typesafe.akkademo.client
 
 import akka.actor.ActorSystem
+
 import scala.concurrent.duration._
 import scala.concurrent.Await
 import akka.util.Timeout
 import akka.pattern.ask
 import com.typesafe.config.ConfigFactory
-import com.typesafe.akkademo.common.{ Bet, RetrieveBets }
-import com.typesafe.akkademo.common.Bet
+import com.typesafe.akkademo.common.{Bet, BetList, RetrieveBets}
 
 object BetClient extends App {
 
@@ -19,35 +19,43 @@ object BetClient extends App {
   val config = ConfigFactory.parseString("""
     akka {
       actor {
-        provider = "akka.remote.RemoteActorRefProvider"
+        provider = remote
+        serializers {
+          jackson-json = "akka.serialization.jackson.JacksonJsonSerializer"
+        }
+        serialization-bindings {
+          "com.typesafe.akkademo.common.Message" = jackson-json
+        }
       }
       remote {
-        transport = "akka.remote.netty.NettyRemoteTransport"
-        netty {
-          hostname = "127.0.0.1"
-          port = 2661
+        artery {
+          transport = tcp
+          canonical.hostname = "127.0.0.1"
+          canonical.port = 2661
         }
       }
     }""")
 
   val system = ActorSystem("TestActorSystem", ConfigFactory.load(config))
-  val service = system.actorFor("akka://BettingServiceActorSystem@127.0.0.1:2552/user/bettingService")
+  val service = system.actorSelection("akka://BettingServiceActorSystem@127.0.0.1:2552/user/bettingService")
 
   try {
     // create the list of bets
     val bets = (1 to 200).map(p ⇒ Bet("ready_player_one", p % 10 + 1, p % 100 + 1))
 
-    if (args.size > 0 && args.head == "send") {
-      bets.foreach(bet ⇒ service ! bet)
-      println("*** SENDING OK")
-    } else {
-      implicit val timeout = Timeout(2 seconds)
-      val fBets = ask(service, RetrieveBets).mapTo[List[Bet]]
-      val result = Await.result(fBets, 5 seconds).sorted
-      assert(result == bets.sorted, s"expected ${bets.sorted}, got $result")
-      println("*** TESTING OK")
+    args match {
+      case Array("send") =>
+        bets.foreach(bet ⇒ service ! bet)
+        println("*** SENDING OK")
+        Thread.sleep(10000)
+      case _ =>
+        implicit val timeout: Timeout = 2.seconds
+        val fBets = ask(service, RetrieveBets).mapTo[BetList]
+        val result = Await.result(fBets, 5.seconds).bets.sorted
+        assert(result == bets.sorted, s"expected ${bets.sorted}, got $result")
+        println("*** TESTING OK")
     }
   } finally {
-    system.shutdown()
+    system.terminate()
   }
 }

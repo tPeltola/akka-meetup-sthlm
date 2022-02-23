@@ -20,7 +20,7 @@ import com.typesafe.akkademo.processor.repository.DatabaseFailureException
 class BettingProcessor extends Actor with ActorLogging {
   import context.dispatcher
 
-  val service = context.actorFor(context.system.settings.config.getString("betting-service-actor"))
+  val service = context.actorSelection(context.system.settings.config.getString("betting-service-actor"))
   val repo = context.actorOf(Props[BetRepository], "repo")
   implicit val timeout = Timeout(5 seconds)
 

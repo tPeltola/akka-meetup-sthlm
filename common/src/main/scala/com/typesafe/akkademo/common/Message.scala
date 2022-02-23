@@ -3,15 +3,19 @@
  */
 package com.typesafe.akkademo.common
 
-case class Bet(player: String, game: Int, amount: Int)
+sealed trait Message
 
-case class PlayerBet(id: Int, bet: Bet)
+case class Bet(player: String, game: Int, amount: Int) extends Message
 
-case class ConfirmationMessage(id: Int)
+case class PlayerBet(id: Int, bet: Bet) extends Message
 
-case object RetrieveBets
+case class ConfirmationMessage(id: Int) extends Message
 
-case object RegisterProcessor
+case object RetrieveBets extends Message
+
+case object RegisterProcessor extends Message
+
+case class BetList(bets: List[Bet]) extends Message
 
 object Bet {
   implicit object BetOrdering extends Ordering[Bet] {

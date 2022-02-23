@@ -3,15 +3,18 @@
  */
 package com.typesafe.akkademo.service
 
-import akka.pattern.ask
-import akka.actor.{ ActorLogging, Actor }
-import com.typesafe.akkademo.common.{ Bet, RetrieveBets }
+import akka.pattern.{ask, pipe}
+import akka.actor.{Actor, ActorLogging}
+import com.typesafe.akkademo.common.{Bet, RetrieveBets}
 import akka.actor.ActorRef
 import com.typesafe.akkademo.common.RegisterProcessor
 import com.typesafe.akkademo.common.PlayerBet
 import akka.util.Timeout
+
 import scala.concurrent.duration._
 import com.typesafe.akkademo.common.ConfirmationMessage
+
+case class Retry(bet: PlayerBet)
 
 class BettingService extends Actor with ActorLogging {
   import context.dispatcher
@@ -37,17 +40,14 @@ class BettingService extends Actor with ActorLogging {
       }
     }
     case RetrieveBets ⇒ for (p ← processor) p.forward(RetrieveBets)
+    case ConfirmationMessage(id) ⇒ bets = bets - id
+    case Retry(b) => context.system.scheduler.scheduleOnce(5 seconds) {
+      processBet(b)
+    }
   }
 
   def processBet(b: PlayerBet): Unit = {
     val future = processor.get ? b
-    future onSuccess {
-      case ConfirmationMessage(id) ⇒ bets = bets - id
-    }
-    future onFailure {
-      case _ ⇒ context.system.scheduler.scheduleOnce(5 seconds) {
-          processBet(b)
-      }
-    }
+    future.recover { case _ => Retry(b) }.pipeTo(self)
   }
 }
