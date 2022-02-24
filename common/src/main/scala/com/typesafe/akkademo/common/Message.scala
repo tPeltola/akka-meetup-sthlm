@@ -3,19 +3,23 @@
  */
 package com.typesafe.akkademo.common
 
+import akka.actor.typed.ActorRef
+
 sealed trait Message
 
 case class Bet(player: String, game: Int, amount: Int) extends Message
 
-case class PlayerBet(id: Int, bet: Bet) extends Message
+case class PlayerBet(id: Int, bet: Bet, sender: ActorRef[Message]) extends Message
 
 case class ConfirmationMessage(id: Int) extends Message
 
-case object RetrieveBets extends Message
+case class RetrieveBets(sender: ActorRef[Message]) extends Message
 
-case object RegisterProcessor extends Message
+case class RegisterProcessor(processor: ActorRef[Message]) extends Message
 
 case class BetList(bets: List[Bet]) extends Message
+
+case class Retry(id: Int) extends Message
 
 object Bet {
   implicit object BetOrdering extends Ordering[Bet] {

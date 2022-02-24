@@ -3,39 +3,26 @@
  */
 package com.typesafe.akkademo.processor.service
 
-import akka.actor.{ ActorLogging, Actor }
-import akka.actor.SupervisorStrategy._
-import akka.pattern.{ ask, pipe }
-import akka.dispatch.MessageDispatcher
-import com.typesafe.akkademo.common.{ PlayerBet, RetrieveBets }
-import com.typesafe.akkademo.common.RegisterProcessor
-import akka.actor.Props
-import akka.util._
-import scala.concurrent.duration._
-import akka.dispatch.MessageDispatcher
-import com.typesafe.akkademo.common.ConfirmationMessage
-import akka.actor.OneForOneStrategy
-import com.typesafe.akkademo.processor.repository.DatabaseFailureException
+import akka.actor.typed.scaladsl.Behaviors
+import akka.actor.typed.scaladsl.adapter._
+import akka.actor.typed.{Behavior, SupervisorStrategy}
+import com.typesafe.akkademo.common.{Message, PlayerBet, RegisterProcessor, RetrieveBets}
 
-class BettingProcessor extends Actor with ActorLogging {
-  import context.dispatcher
 
-  val service = context.actorSelection(context.system.settings.config.getString("betting-service-actor"))
-  val repo = context.actorOf(Props[BetRepository], "repo")
-  implicit val timeout = Timeout(5 seconds)
+object BettingProcessor {
+  def apply(): Behavior[Message] = Behaviors.setup { context =>
+    val service = context.toClassic.actorSelection(context.system.settings.config.getString("betting-service-actor"))
+    val repo = context.spawn(Behaviors.supervise[Message](BetRepository()).onFailure(SupervisorStrategy.restart), "repo")
 
-  override def preStart = {
-    service ! RegisterProcessor
-  }
+    service ! RegisterProcessor(context.self)
 
-  override val supervisorStrategy =
-    OneForOneStrategy() {
-      case _: RuntimeException         ⇒ Restart
-      case _: DatabaseFailureException ⇒ Restart
+    Behaviors.receiveMessage[Message] {
+      case bet: PlayerBet =>
+        repo ! bet
+        Behaviors.same
+      case retrieve: RetrieveBets =>
+        repo ! retrieve
+        Behaviors.same
     }
-
-  def receive = {
-    case bet: PlayerBet ⇒ repo.forward(bet)
-    case RetrieveBets   ⇒ repo.forward(RetrieveBets)
   }
 }

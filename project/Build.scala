@@ -3,7 +3,7 @@ import sbt.Keys._
 
 object Dependencies {
   import Dependency._
-  val akkademo = Seq(akkaActor, akkaRemote, akkaJackson, scalaTest)
+  val akkademo = Seq(akkaActor, akkaTyped, akkaRemote, akkaJackson, logback, scalaTest)
 }
 
 object Dependency {
@@ -18,6 +18,7 @@ object Dependency {
   val akkaTyped   = "com.typesafe.akka"   %% "akka-actor-typed"           % Version.Akka
   val akkaRemote  = "com.typesafe.akka"   %% "akka-remote"                % Version.Akka
   val akkaJackson = "com.typesafe.akka"   %% "akka-serialization-jackson" % Version.Akka
+  val logback     = "ch.qos.logback"       % "logback-classic"            % "1.2.10"
 
   // ---- Test dependencies ----
 

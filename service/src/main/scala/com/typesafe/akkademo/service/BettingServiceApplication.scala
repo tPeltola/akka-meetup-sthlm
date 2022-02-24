@@ -3,11 +3,16 @@
  */
 package com.typesafe.akkademo.service
 
-import akka.actor.{ Props, ActorSystem }
+import akka.NotUsed
+import akka.actor.typed.ActorSystem
+import akka.actor.typed.scaladsl.Behaviors
 import com.typesafe.config._
 
 object BettingServiceApplication extends App {
-  val system = ActorSystem("BettingServiceActorSystem", ConfigFactory.load())
+  val start = Behaviors.setup[NotUsed] { context =>
+    context.spawn(BettingService(), "bettingService")
+    Behaviors.empty
+  }
 
-  val service = system.actorOf(Props[BettingService], "bettingService")
+  val system = ActorSystem(start, "BettingServiceActorSystem", ConfigFactory.load())
 }

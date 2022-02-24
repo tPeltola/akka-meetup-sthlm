@@ -5,49 +5,58 @@ package com.typesafe.akkademo.service
 
 import akka.pattern.{ask, pipe}
 import akka.actor.{Actor, ActorLogging}
-import com.typesafe.akkademo.common.{Bet, RetrieveBets}
-import akka.actor.ActorRef
-import com.typesafe.akkademo.common.RegisterProcessor
-import com.typesafe.akkademo.common.PlayerBet
+import com.typesafe.akkademo.common.{Bet, ConfirmationMessage, Message, PlayerBet, RegisterProcessor, RetrieveBets, Retry}
+import akka.actor.typed.ActorRef
+import akka.actor.typed.Behavior
+import akka.actor.typed.scaladsl.ActorContext
+import akka.actor.typed.scaladsl.Behaviors
 import akka.util.Timeout
+import akka.actor.typed.scaladsl.adapter._
 
 import scala.concurrent.duration._
-import com.typesafe.akkademo.common.ConfirmationMessage
+import scala.util.Success
 
-case class Retry(bet: PlayerBet)
 
-class BettingService extends Actor with ActorLogging {
-  import context.dispatcher
+object BettingService {
+  def apply(): Behavior[Message] = noProcessor(Map.empty, 1)
 
-  var processor: Option[ActorRef] = None
-  var bets: Map[Int, PlayerBet] = Map()
-  var sequence = 1
-
-  implicit val timeout = Timeout(5 seconds)
-
-  def receive = {
-    case RegisterProcessor ⇒ {
-      processor = Some(sender)
-
-      for (b ← bets.values) processBet(b)
-    }
-    case bet: Bet ⇒ {
-      val player = PlayerBet(sequence, bet)
-      sequence += 1
-      processor match {
-        case Some(p) ⇒ processBet(player)
-        case None    ⇒ bets = bets + (player.id -> player)
-      }
-    }
-    case RetrieveBets ⇒ for (p ← processor) p.forward(RetrieveBets)
-    case ConfirmationMessage(id) ⇒ bets = bets - id
-    case Retry(b) => context.system.scheduler.scheduleOnce(5 seconds) {
-      processBet(b)
+  def noProcessor(bets: Map[Int, Bet], sequence: Int): Behavior[Message] = Behaviors.setup { context =>
+    Behaviors.receiveMessage {
+      case bet: Bet =>
+        noProcessor(bets + (sequence -> bet), sequence + 1)
+      case RegisterProcessor(processor) =>
+        bets.foreach { case (id, bet) => processBet(context, processor, id, bet) }
+        usingProcessor(bets, sequence, processor)
     }
   }
 
-  def processBet(b: PlayerBet): Unit = {
-    val future = processor.get ? b
-    future.recover { case _ => Retry(b) }.pipeTo(self)
+
+  def usingProcessor(bets: Map[Int, Bet], sequence: Int, processor: ActorRef[Message]): Behavior[Message] = Behaviors.setup { context =>
+    Behaviors.receiveMessage {
+      case RegisterProcessor(registered) =>
+        usingProcessor(bets, sequence, registered)
+      case bet: Bet =>
+        processBet(context, processor, sequence, bet)
+        usingProcessor(bets + (sequence -> bet), sequence + 1, processor)
+      case retrieve: RetrieveBets ⇒
+        processor ! retrieve
+        Behaviors.same
+      case ConfirmationMessage(id) ⇒
+        usingProcessor(bets - id, sequence, processor)
+      case Retry(id) if bets.contains(id) =>
+        processBet(context, processor, id, bets(id))
+        Behaviors.same
+      case Retry(b) =>
+        Behaviors.same
+    }
   }
+
+  def processBet(context: ActorContext[Message], processor: ActorRef[Message], id: Int, bet: Bet): Unit = {
+    implicit val timeout = Timeout(5.seconds)
+    context.ask(processor, replyTo => PlayerBet(id, bet, replyTo)) {
+      case Success(ConfirmationMessage(id)) => ConfirmationMessage(id)
+      case _ => Retry(id)
+    }
+  }
+
 }
