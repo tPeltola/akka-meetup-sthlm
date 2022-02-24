@@ -4,9 +4,10 @@
 package com.typesafe.akkademo.processor.repository
 
 import com.typesafe.akkademo.common._
-import java.io.{ FileWriter, File }
+
+import java.io.{File, FileWriter}
+import java.util.concurrent.ThreadLocalRandom
 import scala.io.Source
-import scala.concurrent.forkjoin.ThreadLocalRandom
 
 trait UnstableResource {
   def save(idempotentId: Int, player: String, game: Int, amount: Int): Unit
@@ -19,11 +20,11 @@ class ReallyUnstableResource extends UnstableResource {
   private val store = new File("persistent_store")
 
   try {
-    Source.fromFile(store).getLines().foreach(s ⇒ deserialize(s).foreach {
-      case (id, player, game, amount) ⇒ if (!bets.contains(id)) bets += (id -> Bet(player, game, amount))
+    Source.fromFile(store).getLines().foreach(s => deserialize(s).foreach {
+      case (id, player, game, amount) => if (!bets.contains(id)) bets += (id -> Bet(player, game, amount))
     })
   } catch {
-    case _: Exception ⇒
+    case _: Exception =>
   }
 
   def save(id: Int, player: String, game: Int, amount: Int) = {
@@ -43,18 +44,18 @@ class ReallyUnstableResource extends UnstableResource {
   }
 
   protected def serialize(id: Int, player: String, game: Int, amount: Int): String = {
-    id + ":" + player + ":" + game + ":" + amount
+    s"$id:$player:$game:$amount"
   }
 
   protected def deserialize(s: String): Option[(Int, String, Int, Int)] = {
     s.split(":").toList match {
-      case id :: player :: game :: amount :: Nil ⇒
+      case id :: player :: game :: amount :: Nil =>
         try {
           Option((id.toInt, player, game.toInt, amount.toInt))
         } catch {
-          case _: Exception ⇒ None
+          case _: Exception => None
         }
-      case _ ⇒ None
+      case _ => None
     }
   }
 }

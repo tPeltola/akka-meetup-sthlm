@@ -5,7 +5,7 @@ package com.typesafe.akkademo.service
 
 import akka.pattern.{ask, pipe}
 import akka.actor.{Actor, ActorLogging}
-import com.typesafe.akkademo.common.{Bet, ConfirmationMessage, Message, PlayerBet, RegisterProcessor, RetrieveBets, Retry}
+import com.typesafe.akkademo.common.{Bet, Command, Request, ConfirmationMessage, PlayerBet, RegisterProcessor, RetrieveBets, Retry}
 import akka.actor.typed.ActorRef
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.ActorContext
@@ -18,9 +18,9 @@ import scala.util.Success
 
 
 object BettingService {
-  def apply(): Behavior[Message] = noProcessor(Map.empty, 1)
+  def apply(): Behavior[Request] = noProcessor(Map.empty, 1)
 
-  def noProcessor(bets: Map[Int, Bet], sequence: Int): Behavior[Message] = Behaviors.setup { context =>
+  def noProcessor(bets: Map[Int, Bet], sequence: Int): Behavior[Request] = Behaviors.setup { context =>
     Behaviors.receiveMessage {
       case bet: Bet =>
         noProcessor(bets + (sequence -> bet), sequence + 1)
@@ -31,17 +31,17 @@ object BettingService {
   }
 
 
-  def usingProcessor(bets: Map[Int, Bet], sequence: Int, processor: ActorRef[Message]): Behavior[Message] = Behaviors.setup { context =>
+  def usingProcessor(bets: Map[Int, Bet], sequence: Int, processor: ActorRef[Command]): Behavior[Request] = Behaviors.setup { context =>
     Behaviors.receiveMessage {
       case RegisterProcessor(registered) =>
         usingProcessor(bets, sequence, registered)
       case bet: Bet =>
         processBet(context, processor, sequence, bet)
         usingProcessor(bets + (sequence -> bet), sequence + 1, processor)
-      case retrieve: RetrieveBets ⇒
+      case retrieve: RetrieveBets =>
         processor ! retrieve
         Behaviors.same
-      case ConfirmationMessage(id) ⇒
+      case ConfirmationMessage(id) =>
         usingProcessor(bets - id, sequence, processor)
       case Retry(id) if bets.contains(id) =>
         processBet(context, processor, id, bets(id))
@@ -51,8 +51,8 @@ object BettingService {
     }
   }
 
-  def processBet(context: ActorContext[Message], processor: ActorRef[Message], id: Int, bet: Bet): Unit = {
-    implicit val timeout = Timeout(5.seconds)
+  def processBet(context: ActorContext[Request], processor: ActorRef[Command], id: Int, bet: Bet): Unit = {
+    implicit val timeout: Timeout = Timeout(5.seconds)
     context.ask(processor, replyTo => PlayerBet(id, bet, replyTo)) {
       case Success(ConfirmationMessage(id)) => ConfirmationMessage(id)
       case _ => Retry(id)

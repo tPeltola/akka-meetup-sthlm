@@ -1,6 +1,6 @@
 ThisBuild / organization := "akkademo"
 ThisBuild / version      := "1.0-SNAPSHOT"
-ThisBuild / scalaVersion := "2.12.15"
+ThisBuild / scalaVersion := "2.13.8"
 
 lazy val akkademo = (project in file("."))
   .aggregate(common, processor, service, client)
