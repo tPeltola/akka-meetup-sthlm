@@ -3,8 +3,6 @@
  */
 package com.typesafe.akkademo.service
 
-import akka.pattern.{ask, pipe}
-import akka.actor.{Actor, ActorLogging}
 import com.typesafe.akkademo.common.{Bet, Command, Request, ConfirmationMessage, PlayerBet, RegisterProcessor, RetrieveBets, Retry}
 import akka.actor.typed.ActorRef
 import akka.actor.typed.Behavior
@@ -43,10 +41,8 @@ object BettingService {
         Behaviors.same
       case ConfirmationMessage(id) =>
         usingProcessor(bets - id, sequence, processor)
-      case Retry(id) if bets.contains(id) =>
+      case Retry(id) =>
         processBet(context, processor, id, bets(id))
-        Behaviors.same
-      case Retry(b) =>
         Behaviors.same
     }
   }
